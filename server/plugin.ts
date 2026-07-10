@@ -37,6 +37,14 @@ export function gatewardApi(opts: GatewardApiOptions): Plugin {
             const claims = await server.verifyToken(body.token, opts.appId);
             return json(res, 200, { claims });
           }
+          if (req.url === "/api/set-metadata" && req.method === "POST") {
+            // Per-app user metadata (needs users:write_app on the API key).
+            const metadata = await server.updateUserMetadata(
+              body.userId,
+              body.metadata,
+            );
+            return json(res, 200, { metadata });
+          }
           return next();
         } catch (err) {
           const status = err instanceof GatewardError ? err.status || 500 : 500;

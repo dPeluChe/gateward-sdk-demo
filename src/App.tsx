@@ -100,6 +100,9 @@ export function App() {
           <button onClick={() => run("sendEvent (server)", async () => { const token = await auth.getAccessToken(); const { sub } = decodeClaims(token); await apiPost("/api/send-event", { eventType: "app.demo.button_clicked", userId: sub, metadata: { at: new Date().toISOString() } }); return "202"; })}>
             send event (server)
           </button>
+          <button onClick={() => run("setUserMetadata (server)", async () => { const token = await auth.getAccessToken(); const { sub } = decodeClaims(token); const r = await apiPost<{ metadata: Record<string, unknown> }>("/api/set-metadata", { userId: sub, metadata: { tier: "gold", lastSeenFromDemo: new Date().toISOString() } }); return `merged: ${JSON.stringify(r.metadata)}`; })}>
+            set metadata (server)
+          </button>
         </div>
       </section>
 
