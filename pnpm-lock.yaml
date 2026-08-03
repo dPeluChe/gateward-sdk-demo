@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@gateward/sdk':
         specifier: file:../gateward-sdk
-        version: file:../gateward-sdk
+        version: file:../gateward-sdk(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -281,6 +281,11 @@ packages:
   '@gateward/sdk@file:../gateward-sdk':
     resolution: {directory: ../gateward-sdk, type: directory}
     engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18'
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -847,9 +852,11 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@gateward/sdk@file:../gateward-sdk':
+  '@gateward/sdk@file:../gateward-sdk(react@18.3.1)':
     dependencies:
       jose: 5.10.0
+    optionalDependencies:
+      react: 18.3.1
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

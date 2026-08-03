@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   GatewardAuth,
   GatewardError,
   decodeClaims,
   type GatewardClaims,
+  type GatewardUser,
+  type MembershipResponse,
   type SessionSummary,
 } from "@gateward/sdk";
 import { apiPost } from "./api.js";
@@ -26,7 +28,9 @@ export function App() {
   const [email, setEmail] = useState("demo@example.com");
   const [password, setPassword] = useState("Demo!Pass123");
   const [claims, setClaims] = useState<GatewardClaims | null>(null);
+  const [user, setUser] = useState<GatewardUser | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [members, setMembers] = useState<MembershipResponse[]>([]);
   const [log, setLog] = useState<LogLine[]>([]);
 
   const say = (ok: boolean, text: string) =>
@@ -44,6 +48,21 @@ export function App() {
       say(false, `${label} failed — ${detail}`);
     }
   }
+
+  // Every session transition lands in the log, including the ones no button
+  // triggers: a dead refresh token, or a logout in another tab.
+  useEffect(
+    () =>
+      auth.onAuthStateChange(({ event }) => {
+        say(event !== "session_expired", `event: ${event}`);
+        if (event === "signed_out" || event === "session_expired") {
+          setClaims(null);
+          setUser(null);
+          setSessions([]);
+        }
+      }),
+    [auth],
+  );
 
   const refreshClaims = async () => {
     const token = await auth.getAccessToken();
@@ -77,7 +96,13 @@ export function App() {
           />
         </div>
         <div className="row wrap">
-          <button onClick={() => run("register", () => auth.register(email, password).then(() => "202 (verify email to log in)"))}>
+          <button onClick={() => run("register", async () => {
+            const res = await auth.register(email, password);
+            // APP-POLICY-001: an app with require_email_verification=false
+            // hands back tokens and the SDK is already signed in.
+            if (res.access_token) { await refreshClaims(); return "auto-logged in"; }
+            return "202 — verify the email to log in";
+          })}>
             register
           </button>
           <button onClick={() => run("login", async () => { await auth.login(email, password); await refreshClaims(); return "tokens stored"; })}>
@@ -89,8 +114,22 @@ export function App() {
           <button onClick={() => run("listSessions", async () => { const s = await auth.listSessions(); setSessions(s); return `${s.length} session(s)`; })}>
             sessions
           </button>
-          <button onClick={() => run("logout", async () => { await auth.logout(); setClaims(null); setSessions([]); return "cleared"; })}>
+          <button onClick={() => run("logout", async () => { await auth.logout(); return "cleared"; })}>
             logout
+          </button>
+        </div>
+        <div className="row wrap">
+          <button onClick={() => run("getUser", async () => { const u = await auth.getUser({ force: true }); setUser(u); return `${u.email} · ${u.membership_role ?? "no role"}`; })}>
+            me
+          </button>
+          <button onClick={() => run("updateProfile", async () => { const u = await auth.updateProfile({ display_name: "Demo User", updated_at: new Date().toISOString() }); setUser(u); return JSON.stringify(u.metadata); })}>
+            update profile
+          </button>
+          <button onClick={() => run("changePassword", async () => { await auth.changePassword(password, password); return "same password re-set; other sessions revoked"; })}>
+            change password
+          </button>
+          <button onClick={() => run("revokeAllSessions", async () => { const n = await auth.revokeAllSessions(); setSessions([]); return `${n} revoked (this one kept)`; })}>
+            revoke others
           </button>
         </div>
         <div className="row wrap">
@@ -99,6 +138,9 @@ export function App() {
           </button>
           <button onClick={() => run("sendEvent (server)", async () => { const token = await auth.getAccessToken(); const { sub } = decodeClaims(token); await apiPost("/api/send-event", { eventType: "app.demo.button_clicked", userId: sub, metadata: { at: new Date().toISOString() } }); return "202"; })}>
             send event (server)
+          </button>
+          <button onClick={() => run("listMembers (server)", async () => { const r = await apiPost<{ members: MembershipResponse[]; total?: number }>("/api/members", { appId: APP_ID }); setMembers(r.members); return `${r.members.length} of ${r.total ?? "?"}`; })}>
+            list members (server)
           </button>
           <button onClick={() => run("setUserMetadata (server)", async () => { const token = await auth.getAccessToken(); const { sub } = decodeClaims(token); const r = await apiPost<{ metadata: Record<string, unknown> }>("/api/set-metadata", { userId: sub, metadata: { tier: "gold", lastSeenFromDemo: new Date().toISOString() } }); return `merged: ${JSON.stringify(r.metadata)}`; })}>
             set metadata (server)
@@ -112,8 +154,16 @@ export function App() {
           <pre>{claims ? JSON.stringify(claims, null, 2) : "— not logged in —"}</pre>
         </section>
         <section className="card">
+          <h2>Profile</h2>
+          <pre>{user ? JSON.stringify(user, null, 2) : "— call me —"}</pre>
+        </section>
+        <section className="card">
           <h2>Sessions</h2>
           <pre>{sessions.length ? JSON.stringify(sessions, null, 2) : "—"}</pre>
+        </section>
+        <section className="card">
+          <h2>Members</h2>
+          <pre>{members.length ? JSON.stringify(members, null, 2) : "—"}</pre>
         </section>
       </div>
 
