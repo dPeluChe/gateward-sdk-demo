@@ -36,6 +36,18 @@ usuario; el backend, con la API key, emite eventos y verifica tokens).
    pnpm dev      # http://localhost:5173
    ```
 
+## Qué ejercita
+
+| Browser (`GatewardAuth`) | Server (`GatewardServer`, API key) |
+|---|---|
+| register (detecta auto-login), login, refresh, logout | `verifyToken` vía JWKS |
+| `getUser`, `updateProfile`, `changePassword` | `sendEvent` |
+| `listSessions`, `revokeAllSessions` | `updateUserMetadata` |
+| `onAuthStateChange` → todo evento al log | `listMembers` (ROLE-001) |
+
+El log muestra los eventos de sesión aunque no los dispare un botón: un refresh
+token muerto o un logout en otra pestaña aparecen igual.
+
 ## Flujo de prueba
 
 1. **register** → 202 (el Core exige verificar email antes de login).
@@ -44,10 +56,12 @@ usuario; el backend, con la API key, emite eventos y verifica tokens).
    pnpm verify-user demo@example.com
    ```
 3. **login** → guarda tokens y muestra los claims. **refresh** los rota. **sessions** lista
-   las propias.
+   las propias. **me** trae el perfil; **update profile** escribe su metadata.
 4. **verify token (server)** → el backend del demo valida el JWT vía JWKS (ES256).
 5. **send event (server)** → emite `app.demo.button_clicked` con la API key.
-6. **logout** → limpia la sesión.
+6. **revoke others** cierra las demás sesiones sin tocar esta.
+7. **list members (server)** lista el padrón de la app con la API key.
+8. **logout** → limpia la sesión.
 
 ## Estructura
 

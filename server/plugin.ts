@@ -37,6 +37,20 @@ export function gatewardApi(opts: GatewardApiOptions): Plugin {
             const claims = await server.verifyToken(body.token, opts.appId);
             return json(res, 200, { claims });
           }
+          if (req.url === "/api/members" && req.method === "POST") {
+            // ROLE-001: an app backend manages roles with its own key
+            // (app:user_manage), no platform-admin token needed.
+            const page = await server.listMembers(body.appId, { limit: 20 });
+            return json(res, 200, page);
+          }
+          if (req.url === "/api/set-role" && req.method === "POST") {
+            const member = await server.setMemberRole(
+              body.appId,
+              body.userId,
+              body.role,
+            );
+            return json(res, 200, { member });
+          }
           if (req.url === "/api/set-metadata" && req.method === "POST") {
             // Per-app user metadata (needs users:write_app on the API key).
             const metadata = await server.updateUserMetadata(
