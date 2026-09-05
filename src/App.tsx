@@ -3,6 +3,8 @@ import {
   GatewardAuth,
   GatewardError,
   decodeClaims,
+  type AppConfig,
+  type AppEnvironment,
   type GatewardClaims,
   type GatewardUser,
   type MembershipResponse,
@@ -12,6 +14,9 @@ import { apiPost } from "./api.js";
 
 const BASE_URL = import.meta.env.VITE_GATEWARD_URL ?? "http://localhost:8080";
 const APP_ID = import.meta.env.VITE_GATEWARD_APP_ID ?? "";
+// APP-CONFIG-001: declare what this build expects and the SDK refuses to sign
+// anyone up if the app id points elsewhere (a test build aimed at production).
+const EXPECT_ENV = import.meta.env.VITE_GATEWARD_EXPECT_ENV as AppEnvironment | undefined;
 
 interface LogLine {
   ok: boolean;
@@ -21,7 +26,12 @@ interface LogLine {
 export function App() {
   // One app-scoped client for the whole session (browser half of the SDK).
   const auth = useMemo(
-    () => new GatewardAuth({ baseUrl: BASE_URL, appId: APP_ID }),
+    () =>
+      new GatewardAuth({
+        baseUrl: BASE_URL,
+        appId: APP_ID,
+        ...(EXPECT_ENV ? { expectEnvironment: EXPECT_ENV } : {}),
+      }),
     [],
   );
 
@@ -31,6 +41,9 @@ export function App() {
   const [user, setUser] = useState<GatewardUser | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [members, setMembers] = useState<MembershipResponse[]>([]);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailToken, setEmailToken] = useState("");
   const [log, setLog] = useState<LogLine[]>([]);
 
   const say = (ok: boolean, text: string) =>
@@ -63,6 +76,18 @@ export function App() {
       }),
     [auth],
   );
+
+  // Boot: resolve the public app config once. With VITE_GATEWARD_EXPECT_ENV
+  // set this is also the environment guard — a mismatch fails here, before
+  // any button exists to create a user.
+  useEffect(() => {
+    run("ready (app config)", async () => {
+      const c = await auth.ready();
+      setConfig(c);
+      return `${c.environment} · verification ${c.require_email_verification ? "required" : "off"} · password ≥${c.password_policy.min_length}`;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth]);
 
   const refreshClaims = async () => {
     const token = await auth.getAccessToken();
@@ -97,6 +122,9 @@ export function App() {
         </div>
         <div className="row wrap">
           <button onClick={() => run("register", async () => {
+            // Same rules the Core applies, checked locally first (no round-trip).
+            const fails = await auth.validatePassword(password);
+            if (fails.length) return `rejected locally: ${fails.join(", ")}`;
             const res = await auth.register(email, password);
             // APP-POLICY-001: an app with require_email_verification=false
             // hands back tokens and the SDK is already signed in.
@@ -133,6 +161,30 @@ export function App() {
           </button>
         </div>
         <div className="row wrap">
+          <button onClick={() => run("listMembers (client)", async () => { const r = await auth.listMembers(); setMembers(r.members); return `${r.members.length} — needs app:user_manage (403 for a plain member)`; })}>
+            list members (client)
+          </button>
+          <button onClick={() => run("setMemberRole → app_admin (self)", async () => { const me = user ?? (await auth.getUser()); const m = await auth.setMemberRole(me.user_id, "app_admin"); await refreshClaims(); return `${m.role} — refreshed so the new scopes are live`; })}>
+            make me app_admin
+          </button>
+          <button onClick={() => run("setMemberRole → member (self)", async () => { const me = user ?? (await auth.getUser()); const m = await auth.setMemberRole(me.user_id, "member"); await refreshClaims(); return `${m.role} (409 if I'm the last app_admin)`; })}>
+            demote me
+          </button>
+        </div>
+        <div className="row wrap">
+          <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new email" />
+          <button onClick={() => run("changeEmail", async () => { await auth.changeEmail(newEmail, password); return "202 — token mailed to the NEW address (dev log: email_change_token)"; })}>
+            change email
+          </button>
+          <input value={emailToken} onChange={(e) => setEmailToken(e.target.value)} placeholder="email_change token" />
+          <button onClick={() => run("verifyEmailChange", async () => { await auth.verifyEmailChange(emailToken); setEmail(newEmail); return "confirmed — all sessions revoked, log in again with the new address"; })}>
+            verify email change
+          </button>
+          <button className="danger" onClick={() => run("deleteAccount", async () => { await auth.deleteAccount(password); return "membership in this app removed; identity anonymized only if no other app remains"; })}>
+            delete account
+          </button>
+        </div>
+        <div className="row wrap">
           <button onClick={() => run("verifyToken (server)", async () => { const token = await auth.getAccessToken(); const r = await apiPost<{ claims: GatewardClaims }>("/api/verify", { token }); return `sub=${r.claims.sub.slice(0, 8)} aud=${r.claims.app_id?.slice(0, 8)}`; })}>
             verify token (server)
           </button>
@@ -149,6 +201,10 @@ export function App() {
       </section>
 
       <div className="grid">
+        <section className="card">
+          <h2>App config</h2>
+          <pre>{config ? JSON.stringify(config, null, 2) : "— not loaded —"}</pre>
+        </section>
         <section className="card">
           <h2>Claims</h2>
           <pre>{claims ? JSON.stringify(claims, null, 2) : "— not logged in —"}</pre>

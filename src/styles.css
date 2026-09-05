@@ -103,3 +103,5 @@ pre {
 .log .err {
   color: #f87171;
 }
+
+button.danger { background: #b91c1c; color: #fff; }
