@@ -2,8 +2,12 @@
 
 App runnable que ejercita **las dos mitades** de `@gateward/sdk` contra un Core local:
 
-- **Browser** (`GatewardAuth`): register / login / refresh automático / logout, sesiones
-  propias y claims decodificados.
+- **Browser** (`GatewardAuth`): config pública de la app y guarda de environment
+  (`ready`), validación local del password contra la policy real, register (con auto-login
+  si la app no exige verificación) / login / refresh / logout, perfil propio, change
+  password, sesiones y `revokeAllSessions`, miembros y roles (`listMembers` /
+  `setMemberRole`, con refresh automático al cambiarte a vos mismo), cambio de email en
+  dos pasos (`changeEmail` → `verifyEmailChange`) y `deleteAccount`.
 - **Server-side** (`GatewardServer`, vía un plugin de Vite): `sendEvent` y `verifyToken`
   con la **API key** — que **nunca llega al browser** (vive solo en Node).
 
@@ -74,3 +78,17 @@ token muerto o un logout en otra pestaña aparecen igual.
 - `server/plugin.ts` — plugin de Vite: `/api/send-event` y `/api/verify` con `GatewardServer`.
 - `vite.config.ts` — separa env de browser (`VITE_*`) del de servidor (API key).
 - `scripts/verify-user.mjs` — helper dev para marcar un usuario verificado.
+
+## Lo que cada botón espera que sepas
+
+- **ready / App config** corre solo al cargar. Con `VITE_GATEWARD_EXPECT_ENV=test` en el
+  `.env`, el SDK se niega a registrar o loguear si la app apunta a otro environment: es la
+  guarda que evita que un build de QA cree usuarios en producción.
+- **list members / make me app_admin** necesitan `app:user_manage`. Un miembro normal recibe
+  403 (así se ve en el log). El primer `app_admin` lo promueve un platform admin desde el
+  dashboard; después ese admin puede promover a otros.
+- **change email** manda el token a la dirección **nueva**. Sin SMTP, el Core lo escribe en
+  su log como `email_change_token`; pegalo en el input y **verify email change** lo confirma.
+  Confirmar revoca todas las sesiones: hay que volver a loguear con el email nuevo.
+- **delete account** es irreversible y pide el password. Da de baja la membership de esta app;
+  la identidad se anonimiza solo si no queda en ninguna otra app del pool.
