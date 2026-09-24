@@ -1,0 +1,59 @@
+name: Strongback CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Run it by hand to verify, without a commit.
+  workflow_dispatch:
+
+# A newer push to the same PR cancels the run it made obsolete; main keeps every run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# `@gateward/sdk` is a `file:../gateward-sdk` dependency consumed from its
+# dist/, same setup as gateward-dashboard: both repos are checked out as
+# siblings inside GITHUB_WORKSPACE and every step runs from the demo folder.
+defaults:
+  run:
+    working-directory: gateward-sdk-demo
+
+jobs:
+  strongback:
+    name: Strongback CI (sbk-small)
+    # sbk-small: no Docker needed. Tighten timeout to ~3x p95 after a few runs.
+    # A PR from a fork runs on GitHub-hosted: untrusted code never reaches
+    # the self-hosted pool. Everything else (own branches, main) goes to Strongback.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || fromJSON('["self-hosted","sbk-small"]') }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gateward-sdk-demo
+      - uses: actions/checkout@v4
+        with:
+          repository: dPeluChe/gateward-sdk
+          path: gateward-sdk
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          cache: false
+      # Ephemeral runner: a dependency cache would only upload to GitHub on
+      # every run, so it stays off explicitly.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build SDK
+        working-directory: gateward-sdk
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - run: pnpm install --frozen-lockfile
+      # `build` = tsc --noEmit && vite build: the repo's only check.
+      - run: pnpm build
