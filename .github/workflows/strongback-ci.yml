@@ -2,9 +2,9 @@ name: Strongback CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, prod]
   pull_request:
-    branches: [main]
+    branches: [main, prod]
   # Run it by hand to verify, without a commit.
   workflow_dispatch:
 
